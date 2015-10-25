@@ -1,0 +1,58 @@
+---
+title: "Prediction of Exercise Performance Class of Personal Activity Monitor Data"
+output:
+  html_document:
+    pandoc_args: [
+      "+RTS", "-K64m",
+      "-RTS"
+    ]
+---
+
+#### Chris Miller  
+#### 10/25/2015
+
+The purpose of this project was to develop a machine-learning model in R in order to say how well a person performed the exercise of lifting a dumbbell.  The data were collected using body sensors that captured metrics about body movement, such as yaw, pitch roll, and acceleration along the x-, y- and z-axes.  The data were assigned to 5 different classes:
+
+ * Class A: exercise performed exactly to specification
+ * Class B: throwing elbows to the front
+ * Class C: lifting dumbbell only halfway
+ * Class D: lowering dumbbell only halfway
+ * Class E: throwing the hips to the front
+
+We were given a large training data set (19000 observations) with the exercise class included as the $classe$ variable as well as a small testing data set with 20 observations that was missing the $classe$ variable and had to develop a model that would predict the value of $classe$ for each of the observations.  
+  
+The first thing we need to do is to read in our two data sets.
+```{r cache=TRUE}
+trainData <- read.csv("./pml-training.csv")
+testData <- read.csv("./pml-testing.csv")
+```
+In addition to the raw data (roll, pitch, and yaw of sensors; raw accelerometer, gyroscope, and magnetometer readings; over four sensors in the belt, on the upper arm and forearm, and in the dumbbell) that we will use to derive our model, the data sets also include several calculated features such as the mean, variance, and skewness of the roll, pitch, and yaw.  Unfortunately, these calculated statistics are not populated for each observation, so they are of limited use in a prediction model. Therefore, we will subset those elements out of the data set in order to make deriving the model easier.  We will also cast the $user_name$ and $classe$ variables as factors.
+``` {r cache=TRUE}
+trainData <- subset(trainData, select=grep("^roll_|^pitch_|^yaw_|^total_accel_|^gyros_|^accel_|^magnet_|user_name|classe", colnames(trainData)))
+trainData$user_name = as.factor(trainData$user_name)
+trainData$classe = as.factor(trainData$classe)
+```
+This leaves us with only 54 variables to consider (rather than 159 in the original data set).
+
+The model that I will consider for this project is a random forest.  I will use the $randomForest()$ call directly, because in experimentation, I found that it took orders of magnitude less time to execute when compared to the caret package's $train()$ function.
+
+In order to perform some cross validation using our training data set, I will subset the training data to create a sub-training and sub-testing set.  This will help provide a measure of the error rate.
+```{r cache=TRUE}
+set.seed(12345)
+library(caret)
+inTrain <- createDataPartition(y=trainData$classe, p=0.75, list=FALSE)
+subTrain <- trainData[inTrain,]
+subTest <- trainData[-inTrain,]
+```
+We can then create a model using our sub-training data and use it to predict the values of the sub-testing data.  We can then compare it to the actual values of $classe$ in the sub-testing data to give a measure of the error rate.
+```{r cache=TRUE}
+library(randomForest)
+modelRF <- randomForest(classe~., data=subTrain)
+modelRF
+predictRF <- predict(modelRF, subTest)
+```
+We can then calculate the accuracy of our model as a percentage by comparing the predicted values of $classe$ for the subtest dataset to the actual values, which are known.
+```{r cache=TRUE}
+1-(sum(predictRF != subTest$classe)/length(predictRF))
+```
+This indicates that our model is over 99% accurate.
